@@ -9,6 +9,7 @@ chrome.storage.local.get({ enabled: true, receipts: [], lastSign: null }, ({ ena
   for (const r of receipts.slice(0, 6)) {
     const li = document.createElement('li');
     li.textContent = `✓ ${r.text}`;
+    if (r.url) { const a = document.createElement('a'); a.href = r.url; a.target = '_blank'; a.textContent = ' receipt ↗'; a.style.color = '#2563eb'; li.appendChild(a); }
     const s = document.createElement('small');
     s.textContent = `${new Date(r.at).toLocaleString()} · ${r.finalLen} chars · ${Math.round(r.pasteRatio * 100)}% pasted`;
     li.appendChild(s);

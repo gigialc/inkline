@@ -11,6 +11,8 @@ let sw = ctx.serviceWorkers()[0];
 if (!sw) { try { sw = await ctx.waitForEvent('serviceworker', { timeout: 8000 }); } catch {} }
 console.log('service worker:', sw ? sw.url() : 'NONE');
 if (sw) sw.on('console', m => console.log('[sw]', m.text()));
+// E2E_SITE=http://localhost:3078 → point the extension at a local dev server (needs DATABASE_URL there)
+if (sw && process.env.E2E_SITE) await sw.evaluate((u) => chrome.storage.local.set({ signUrl: u + '/sign' }), process.env.E2E_SITE);
 const gmail = await ctx.newPage();
 gmail.on('console', m => console.log('[gmail]', m.text()));
 await gmail.goto('https://mail.google.com/mail/u/0/#inbox'); await gmail.waitForTimeout(2500);
@@ -34,6 +36,9 @@ console.log('popup closed by itself after ms:', Date.now() - t0, popup.isClosed(
 await gmail.waitForTimeout(1000);
 console.log('sends after touch id (expect 1):', await gmail.evaluate(() => window.__sends));
 console.log('stamp:', await gmail.evaluate(() => document.querySelector('[data-inkline-stamp]')?.textContent));
+const href = await gmail.evaluate(() => document.querySelector('[data-inkline-stamp] a')?.href);
+console.log('receipt link:', href);
+if (href) { const rp = await ctx.newPage(); await rp.goto(href); await rp.waitForTimeout(1500); console.log('RECEIPT PAGE:', (await rp.textContent('body')).replace(/\s+/g,' ').slice(0, 160)); }
 const extId = sw.url().split('/')[2];
 const pp = await ctx.newPage(); await pp.goto(`chrome-extension://${extId}/popup.html`); await pp.waitForTimeout(500);
 console.log('POPUP PAGE:', (await pp.textContent('body')).replace(/\s+/g,' ').slice(0,200));

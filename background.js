@@ -19,7 +19,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const gmailTabId = sender.tab.id;
     (async () => {
       try {
-        const w = await chrome.windows.create({ url: `${SIGN_URL}?c=${encodeURIComponent(msg.challenge)}`, type: 'popup', width: 420, height: 460, focused: true });
+        // dev override: chrome.storage.local.set({ signUrl: 'http://localhost:3000/sign' })
+        const signUrl = (await chrome.storage.local.get({ signUrl: SIGN_URL })).signUrl || SIGN_URL;
+        const w = await chrome.windows.create({ url: `${signUrl}?h=${encodeURIComponent(msg.bodyHash)}`, type: 'popup', width: 420, height: 460, focused: true });
         const p = await getPending(); p[w.id] = gmailTabId; await setPending(p);
         log('opened sign window', w.id, 'for gmail tab', gmailTabId);
       } catch (e) {

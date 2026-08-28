@@ -120,6 +120,7 @@
     if (!touchId) return null; // biometric or nothing
     return {
       text: 'human verified \u00B7 Touch ID',
+      url: s.signed.receiptUrl || null,
       touchId,
       typed: s.typed, pasted: s.pasted, deleted: s.deleted, rewrites: s.rewrites,
       minutes, pasteRatio: +pasteRatio.toFixed(2), finalLen, at: Date.now(),
@@ -127,7 +128,7 @@
   }
 
   /** Markup Gmail keeps when it serializes the body: <div>, <i>, <font color>, <br>. Styles/images get stripped. */
-  function stampNode(text) {
+  function stampNode(text, url) {
     const line = document.createElement('div');
     line.setAttribute('data-inkline-stamp', '1');
     const i = document.createElement('i');
@@ -138,14 +139,21 @@
     img.src = STAMP_IMG; img.alt = '\u270D\uFE0E'; img.width = 14; img.height = 14;
     img.setAttribute('style', 'width:14px;height:14px;vertical-align:-2px;margin-right:4px;');
     f.appendChild(img);
-    f.appendChild(document.createTextNode(text));
+    if (url) {
+      const a = document.createElement('a');
+      a.href = url; a.textContent = text;
+      a.setAttribute('style', 'color:#8a8a8a;text-decoration:none;');
+      f.appendChild(a);
+    } else {
+      f.appendChild(document.createTextNode(text));
+    }
     i.appendChild(f);
     line.appendChild(i);
     return line;
   }
 
   /** Append the stamp on its own line right after the last thing the user wrote (before any quoted reply). */
-  function injectStamp(el, text) {
+  function injectStamp(el, text, url) {
     if (el.querySelector('[data-inkline-stamp]')) return false;
     const skip = (n) => n.closest && n.closest('.gmail_quote');
     const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
@@ -156,7 +164,7 @@
     // climb to the block that directly sits in the body so the stamp becomes the next line
     let block = last ? last.parentNode : null;
     while (block && block.parentNode !== el) block = block.parentNode;
-    const stamp = stampNode(text);
+    const stamp = stampNode(text, url);
     const spacer = document.createElement('div'); spacer.appendChild(document.createElement('br'));
     if (block && block.nextSibling) { el.insertBefore(spacer, block.nextSibling); el.insertBefore(stamp, spacer.nextSibling); }
     else { el.appendChild(spacer); el.appendChild(stamp); }
@@ -169,7 +177,7 @@
     if (!s) return;
     const r = receiptFor(s);
     if (!r) return;
-    if (!injectStamp(el, r.text)) return;
+    if (!injectStamp(el, r.text, r.url)) return;
     // fire a synthetic input so Gmail picks up the DOM change before it serializes the body
     el.dispatchEvent(new Event('input', { bubbles: true }));
     if (hasChrome && alive()) {
@@ -197,13 +205,12 @@
   }
 
   const toB64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-  async function challengeFor(text) {
-    try {
-      const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
-      return toB64url(new Uint8Array(buf));
-    } catch {
-      return toB64url(crypto.getRandomValues(new Uint8Array(32))); // no subtle crypto: still get a fresh challenge
-    }
+  /** Same normalization as the receipt page: collapse whitespace, trim. (Stamp is added after hashing.) */
+  const normalizeBody = (t) => t.split('\n').filter((l) => !/human verified/i.test(l)).join('\n').replace(/\s+/g, ' ').trim();
+  async function bodyHashFor(el) {
+    const text = normalizeBody(el.innerText || el.textContent || '');
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return toB64url(new Uint8Array(buf));
   }
   const SIGN_TIMEOUT_MS = 90_000;
 
@@ -234,9 +241,9 @@
     if (s.signed || awaiting) return false;
     if (textLen(el) === 0) { note('empty email — nothing to sign'); return false; }
     awaiting = { el, resend };
-    challengeFor((el.innerText || el.textContent || '').trim()).then((challenge) => {
+    bodyHashFor(el).then((bodyHash) => {
       try {
-        chrome.runtime.sendMessage({ type: 'INKLINE_SIGN_REQUEST', challenge }, () => {
+        chrome.runtime.sendMessage({ type: 'INKLINE_SIGN_REQUEST', bodyHash }, () => {
           const err = chrome.runtime.lastError;
           // a closed port just means the background didn't ack; the sign result arrives via onMessage later
           if (err && !/message port closed/i.test(err.message)) onSignDone({ ok: false, error: err.message });
@@ -306,5 +313,5 @@
   }).observe(document.documentElement, { childList: true, subtree: true });
 
   // exposed for tests / console debugging
-  window.__inkline = { sessions, receiptFor, injectStamp, finalize, findBodies, interceptSend, CONFIG, version: '5.0.3' };
+  window.__inkline = { sessions, receiptFor, injectStamp, finalize, findBodies, interceptSend, CONFIG, version: '5.1.0' };
 })();
