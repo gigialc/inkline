@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Inkline",
+  "version": "5.0.3",
+  "description": "Touch ID on send. A small stamp proves a human stood behind this email.",
+  "permissions": ["storage"],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://inkline-website-three.vercel.app/sign*"],
+      "js": ["sign-bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Inkline"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
